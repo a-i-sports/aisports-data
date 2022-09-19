@@ -98,11 +98,11 @@ load_cfb_games <- function(season) {
       fcs_a = ifelse(away_team %in% cfbplotR::valid_team_names("FBS"),0,1)
     ) %>%
     # filter(fcs_h + fcs_a == 0)
-    mutate(home_team = ifelse(fcs_h==1,"FCS",home_team),
-           home_rest = ifelse(fcs_h==1, 7,home_rest),
-           away_team = ifelse(fcs_a==1,"FCS",away_team),
-           away_rest = ifelse(fcs_a==1, 7,away_rest)) %>%
-    filter(!(away_team == "FCS" & home_team == "FCS")) |>
+    # mutate(home_team = ifelse(fcs_h==1,"FCS",home_team),
+    #        home_rest = ifelse(fcs_h==1, 7,home_rest),
+    #        away_team = ifelse(fcs_a==1,"FCS",away_team),
+    #        away_rest = ifelse(fcs_a==1, 7,away_rest)) %>%
+    filter((away_team %in% cfbplotR::valid_team_names("FBS")) | (home_team %in% cfbplotR::valid_team_names("FBS"))) |>
     left_join(bet_df |>
                 select(-start_date,-home_team,-home_conference,-away_team,-away_conference),
               by = c("game_id","season","week","season_type"))
