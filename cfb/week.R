@@ -606,5 +606,150 @@ opp_adj_final <-
 saveRDS(opp_adj,"cfb/data/ncaaf_opp_adj.RDS")
 
 
+# FEI
+library(rvest)
+
+fei_game_scraper <- function(season){
+
+  cfbfastR_game_info <- cfbfastR::cfbd_game_info(year = season,season_type = "both")
+
+  url <- glue::glue("https://www.bcftoys.com/{season}-gr")
+  raw <- rvest::read_html(url)
+
+  table <- raw %>% html_table() %>% .[[1]]
+
+  names(table) <-  c("week","opponent","result","final_score",
+                     "non_garbage_score","DROP_1","game_rating","game_rating_percentile","game_rating_rank",
+                     "DROP_2","offense_rating","offense_rating_percentile","offense_rating_rank",
+                     "DROP_3","defense_rating","defense_rating_percentile","defense_rating_rank",
+                     "DROP_4","special_teams_rating","special_teams_rating_percentile","special_teams_rating_rank")
+  clean_table <- table %>%
+    select(-starts_with("DROP")) %>%
+    filter(!is.na(result)) %>%
+    mutate(title_row = case_when(str_detect(opponent,"Game Rating") ~ 1,
+                                 TRUE ~ 0)) %>%
+    mutate(team_index = cumsum(title_row)) %>%
+    #filter(title_row == 0) %>%
+    group_by(team_index) %>%
+    mutate(team = str_extract(first(week),"^.*(?= 2)"),
+           season = season) %>%
+    filter(title_row == 0, opponent != "Opponent") %>%
+    ungroup() %>%
+    select(-team_index,-title_row) %>%
+    mutate(
+      team = cfbplotR::clean_school_names(team),
+      opponent = cfbplotR::clean_school_names(opponent),
+      team = case_when(team == "UL Monroe" ~ "Louisiana Monroe",
+                       team == "UTSA" ~ "UT San Antonio",
+                       TRUE ~ team
+      ),
+      opponent = case_when(opponent == "UL Monroe" ~ "Louisiana Monroe",
+                           opponent == "UTSA" ~ "UT San Antonio",
+                           TRUE ~ opponent
+      ),
+      week = case_when(week == "C" & season >= 2009 ~ "14",
+                       week == "C" ~ as.character(max(cfbfastR_game_info$week)),
+                       week == "P" ~ "B",
+                       week == "11" & season == 2020 & (team %in% c("California","UCLA")) ~ "12",
+                       week == "0" ~ "1",
+                       TRUE ~ week)) %>%
+    select(season,team,everything())
+
+  for_return <- cfbfastR_game_info %>% #filter(season_type != "regular") %>% select(home_team,away_team)
+    mutate(result = home_points-away_points,sim = game_id,week= as.character(week),
+           week = case_when(season_type == "postseason" ~ "B",
+                            TRUE ~ week)) %>%
+    nflseedR:::double_games() %>%
+    rename(game_id = sim) %>%
+    select(game_id,week,team,opp) %>%
+    right_join(clean_table, by = c("week","team","opp" = "opponent"))
 
 
+
+  return(for_return)
+
+}
+
+fei_split_scraper <- function(season){
+
+  cfbfastR_game_info <- cfbfastR::cfbd_game_info(year = season,season_type = "both")
+
+  url <- glue::glue("https://www.bcftoys.com/{season}-gs")
+  raw <- rvest::read_html(url)
+
+  table <- raw %>% html_table() %>% .[[1]]
+
+  names(table) <-  c("week","opponent","result","final_score","non_garbage_final_score","DROP_0","offensive_drive_efficiency",
+                     "defenseive_drive_efficiency","net_drive_efficiency","DROP_1","offense_points_per_drive",
+                     "defense_points_per_drive","net_points_per_drive","DROP_2","offensive_available_yards_percentage",
+                     "defensive_available_yards_percentage","net_available_yards_percentage","DROP_3",
+                     "offensive_yards_per_play","defensive_yards_per_play","net_yards_per_play")
+  clean_table <- table %>%
+    select(-starts_with("DROP")) %>%
+    filter(!is.na(result)) %>%
+    mutate(title_row = case_when((result %in% c("R","L","W")) ~ 0,
+                                 TRUE ~ 1)) %>%
+    mutate(team_index = cumsum(title_row)) %>%
+    #filter(title_row == 0) %>%
+    group_by(team_index) %>%
+    mutate(team = str_extract(first(week),"^.*(?= 2)"),
+           season = season) %>%
+    filter(title_row == 0, opponent != "Opponent") %>%
+    ungroup() %>%
+    select(-team_index,-title_row) %>%
+    mutate(
+      team = cfbplotR::clean_school_names(team),
+      opponent = cfbplotR::clean_school_names(opponent),
+      team = case_when(team == "UL Monroe" ~ "Louisiana Monroe",
+                       team == "UTSA" ~ "UT San Antonio",
+                       TRUE ~ team
+      ),
+      opponent = case_when(opponent == "UL Monroe" ~ "Louisiana Monroe",
+                           opponent == "UTSA" ~ "UT San Antonio",
+                           TRUE ~ opponent
+      ),
+      week = case_when(week == "C" & season >= 2009 ~ "14",
+                       week == "C" ~ as.character(max(cfbfastR_game_info$week)),
+                       week == "P" ~ "B",
+                       week == "11" & season == 2020 & (team %in% c("California","UCLA")) ~ "12",
+                       week == "0" ~ "1",
+                       TRUE ~ week)) %>%
+    select(season,team,everything())
+
+  for_return <- cfbfastR_game_info %>% #filter(season_type != "regular") %>% select(home_team,away_team)
+    mutate(result = home_points-away_points,sim = game_id,week= as.character(week),
+           week = case_when(season_type == "postseason" ~ "B",
+                            TRUE ~ week)) %>%
+    nflseedR:::double_games() %>%
+    rename(game_id = sim) %>%
+    select(week,team,opp) %>% #dropped game_id
+    right_join(clean_table, by = c("week","team","opp" = "opponent"))
+
+
+
+  return(for_return)
+
+}
+
+fei_data <- map_df(2022,
+                   function(x){
+                     cli::cli_alert_info("scraping season {x}")
+                     temp <- fei_game_scraper(x)
+                     Sys.sleep(5)
+                     temp2 <- fei_split_scraper(x)
+                     Sys.sleep(5)
+                     for_return <- left_join(temp,temp2,by = c("season","team","week","opp","result","final_score"))
+                     return(for_return)
+                   })
+
+fei_data_clean <- fei_data |>
+  mutate(week = parse_number(week)) |>
+  mutate(across(game_rating:net_points_per_drive,parse_number))
+
+fei_data_final <- ncaaf_fei_data |> # Already has pre 2022
+  bind_rows(fei_data_clean) |>
+  mutate(across(offensive_available_yards_percentage:net_yards_per_play,parse_number))
+
+
+
+saveRDS(fei_data_final, "cfb/data/ncaaf_fei_data.RDS")
