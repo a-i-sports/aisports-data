@@ -1,8 +1,9 @@
-aispoRts::ncaaf_fei_data
-aispoRts::ncaaf_game_info
-aispoRts::ncaaf_game_stats
-aispoRts::ncaaf_opp_adj
-aispoRts::ncaaf_preseason_stats
+library(aispoRts)
+aispoRts:::ncaaf_fei_data
+aispoRts:::ncaaf_game_info
+aispoRts:::ncaaf_game_stats
+aispoRts:::ncaaf_opp_adj
+aispoRts:::ncaaf_preseason_stats
 
 library(cfbfastR)
 library(cfb4th)
@@ -603,7 +604,7 @@ opp_adj_final <-
     opp_adj_pre
   ) |>
   arrange(season,week)
-saveRDS(opp_adj,"cfb/data/ncaaf_opp_adj.RDS")
+saveRDS(opp_adj_final,"cfb/data/ncaaf_opp_adj.RDS")
 
 
 # FEI
@@ -680,7 +681,7 @@ fei_split_scraper <- function(season){
   table <- raw %>% html_table() %>% .[[1]]
 
   names(table) <-  c("week","opponent","result","final_score","non_garbage_final_score","DROP_0","offensive_drive_efficiency",
-                     "defenseive_drive_efficiency","net_drive_efficiency","DROP_1","offense_points_per_drive",
+                     "defensive_drive_efficiency","net_drive_efficiency","DROP_1","offense_points_per_drive",
                      "defense_points_per_drive","net_points_per_drive","DROP_2","offensive_available_yards_percentage",
                      "defensive_available_yards_percentage","net_available_yards_percentage","DROP_3",
                      "offensive_yards_per_play","defensive_yards_per_play","net_yards_per_play")
@@ -744,11 +745,11 @@ fei_data <- map_df(2022,
 
 fei_data_clean <- fei_data |>
   mutate(week = parse_number(week)) |>
-  mutate(across(game_rating:net_points_per_drive,parse_number))
+  mutate(across(game_rating:net_yards_per_play,parse_number))
 
-fei_data_final <- ncaaf_fei_data |> # Already has pre 2022
-  bind_rows(fei_data_clean) |>
-  mutate(across(offensive_available_yards_percentage:net_yards_per_play,parse_number))
+fei_data_final <- aispoRts:::ncaaf_fei_data |> # Already has pre 2022
+  filter(season != 2022) |>
+  bind_rows(fei_data_clean)
 
 
 
